@@ -1,0 +1,31 @@
+manifest:
+    etc/network/interfaces:
+        source: files/interfaces
+        owner: root
+        group: root
+        mode: 0644
+
+sources:
+    debian-squeeze:
+        url: http://ftp.debian.org/debian
+        suite: squeeze
+        components:
+            - main
+
+pre-packages:
+    default:
+        - apt-transport-https
+
+packages:
+    default:
+        - grub2
+        - lvm2
+        - linux-image-2.6-amd64
+        - locales
+        - openssh-server
+        - curl
+
+postinst:
+    - "echo root:changeme | chpasswd"
+    - "echo 'en_US UTF-8' >> /etc/locale.gen && /usr/sbin/locale-gen"
+    - "rm /etc/udev/rules.d/70-persistent-net.rules"

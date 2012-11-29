@@ -1,0 +1,64 @@
+vdisk is a tool to create a debian system suitable for use by a
+virtualization technology such as kvm/qemu. The output image is
+is a sparse file holding a a partition table, the grub boot loader
+and a filesystem containing the base system.
+
+Installation
+============
+
+vdisk is designed to run in Debian GNU/Linux and the standard
+configuration builds a Debian Squeeze image.
+
+vdisk depends on a few packages being installed on the system where
+images are built. This can be accomplished by running the following
+command:
+
+    apt-get install kpartx parted lvm2 python-argparse
+
+Functionality
+=============
+
+vdisk builds sparse images and mounts them to loopback devices for convenient
+access.
+
+This allows for easy manipulation of these images inside of a chroot,
+effectively letting allow for setup of a virtual base system without having to
+run a virtual machine.
+
+Usage
+=====
+
+All of the following commands must be run as root on a linux host.
+
+vdisk expects a configuration file in the current working directory called
+vdisk.yaml, an example should be distributed with this package.
+
+Build a fresh image and bootstrap a base system to it.
+
+    bin/vdisk foo.img create
+    bin/vdisk foo.img bootstrap
+
+Install required packages, and prepare image for booting.
+
+    bin/vdisk foo.img install [selections]
+
+Try it out.
+
+    bin/vdisk foo.img enter
+
+When you have a successfully installed a system, try it out using a virtual
+machine or an emulator like qemu.
+
+    qemu-system-x86_64 -hda foo.img -monitor stdio
+
+Important Files
+===============
+
+vdisk.yaml - Contains configuration for how to create your virtual disk.
+
+License & Credits
+=================
+
+This software is released under the GNU GPL, see COPYING for details. It is 
+written by John-John Tedro <udoprog@spotify.com> and
+Noa Resare <noa@spotify.com>. Copyright is held by Spotify AB.

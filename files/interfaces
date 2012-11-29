@@ -1,0 +1,12 @@
+#
+# This file is part of vdisk.
+#
+
+# Automatically setup loopback.
+auto lo
+iface lo inet loopback
+
+# Automatically setup eth0.
+# Configuration through dhcp.
+auto eth0
+iface eth0 inet dhcp 
