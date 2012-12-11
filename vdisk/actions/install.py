@@ -13,6 +13,7 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 import os
+import re
 import logging
 
 log = logging.getLogger(__name__)
@@ -20,6 +21,7 @@ log = logging.getLogger(__name__)
 from vdisk.helpers import entered_system
 from vdisk.helpers import find_first_device
 from vdisk.helpers import copy_file
+from vdisk.helpers import create_directory
 from vdisk.helpers import install_packages
 
 from vdisk.externalcommand import ExternalCommand
@@ -184,20 +186,28 @@ def generate_devicemap(ns, logical_volumes):
 def install_manifest(ns, manifest):
     log.info("Installing files from manifest")
 
-    for target, opts in manifest.items():
-        source = opts.get("source")
+    for target_item in manifest:
+        target = target_item.get("target")
+        if target is None:
+            raise Exception("Target must be specified in manifest configuration")
+        target = re.sub('^/', '', target)
 
-        if source is None:
-            raise Exception(
-                "source must be specified in manifest configuration")
+        owner = target_item.get("owner", "root")
+        group = target_item.get("group", "root")
+        mode = target_item.get("mode", 0644)
+        ftype = target_item.get("type", "file")
 
-        owner = opts.get("owner", "root")
-        group = opts.get("group", "root")
-        mode = opts.get("mode", 0644)
-
-        log.info("Installing {0} to {1}".format(source, target))
-        copy_file(ns, source, target, owner=owner, group=group, mode=mode)
-
+        if ftype == "file":
+            source = target_item.get("source")
+            if source is None:
+                raise Exception("source must be specified in manifest configuration")
+            log.info("Installing {0} to /{1}".format(source, target))
+            copy_file(ns, source, target, owner=owner, group=group, mode=mode)
+        elif ftype == "directory":
+            log.info("Creating directory /{0}".format(target))
+            create_directory(ns, target, owner=owner, group=group, mode=mode)
+        else:
+            raise Exception("Uknown manifest type: {0} ({1})".format(ftype, target))
 
 def execute_postinst(ns, postinst):
     for trigger in postinst:

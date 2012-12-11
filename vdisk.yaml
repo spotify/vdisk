@@ -1,9 +1,14 @@
 manifest:
-    etc/network/interfaces:
-        source: files/interfaces
-        owner: root
-        group: root
-        mode: 0644
+    - target: /etc/network/interfaces
+      source: files/interfaces
+      owner: root
+      group: root
+      mode: 0644
+    - target: /etc/vdisk
+      type: directory
+      owner: root
+      group: root
+      mode: 0755
 
 sources:
     debian-squeeze:
@@ -28,4 +33,5 @@ packages:
 postinst:
     - "echo root:changeme | chpasswd"
     - "echo 'en_US UTF-8' >> /etc/locale.gen && /usr/sbin/locale-gen"
-    - "rm /etc/udev/rules.d/70-persistent-net.rules"
+    - "rm -f /etc/udev/rules.d/70-persistent-net.rules"
+    - "echo Created with vdisk on $HOSTNAME by $USER at $(date) > /etc/vdisk/created.txt"
