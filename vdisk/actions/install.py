@@ -57,8 +57,11 @@ def action(ns):
         log.info("Configuring apt")
         configure_base_system(ns, apt_env, path)
 
-        log.info("Download selected packages (do not unpack or configure)")
-        download_selections(ns, apt_env, path)
+        log.info("Install selected packages")
+        if ns.download:
+            download_selections(ns, apt_env, path)
+        else:
+            install_selections(ns, apt_env, path)
 
         tmp_devicemap = generate_temporary_devicemap(devices)
         log.info("Writing temporary device.map")
@@ -155,9 +158,23 @@ def download_selections(ns, apt_env, path):
         chroot(path, ns.dpkg, "--set-selections", env=apt_env,
                input_fd=f)
 
-    log.info("Installing selections")
+    log.info("Downloading selections")
     chroot(path, ns.apt_get, "-y", "-u", "--download-only",
            "dselect-upgrade", env=apt_env)
+
+def install_selections(ns, apt_env, path):
+    with open(ns.selections) as f:
+        log.info("Setting selections")
+        chroot(path, ns.dpkg, "--set-selections", env=apt_env,
+               input_fd=f)
+
+    log.info("Installing selections")
+
+    write_mounted(ns.mountpoint, "usr/sbin/policy-rc.d", ["exit 101"])
+    chroot(path, 'chmod', '755', '/usr/sbin/policy-rc.d')
+    chroot(path, ns.apt_get, "-y", "-u",
+           "dselect-upgrade", env=apt_env)
+    chroot(path, 'rm', '-f', '/usr/sbin/policy-rc.d')
 
 
 def generate_temporary_devicemap(devices):
