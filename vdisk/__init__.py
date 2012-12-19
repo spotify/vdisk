@@ -78,7 +78,8 @@ def setup_argument_parser():
                         metavar="<level>",
                         help=("Set log level, valid values are: "
                               "DEBUG, INFO, ERROR. Default: INFO"),
-                        type=lambda l: getattr(logging, l, logging.INFO))
+                        type=lambda l: getattr(logging, l.upper(),
+                                               logging.INFO))
     parser.add_argument("-V", "--volume-group",
                         metavar="<name>",
                         help="Name of volume group, default: VolGroup00",
