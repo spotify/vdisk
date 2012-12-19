@@ -176,3 +176,12 @@ def copy_file(ns, source, target, owner="root", group="root", mode=0644):
            abs_target_path)
 
     chroot(ns.mountpoint, "chmod", oct(mode), abs_target_path)
+
+def create_directory(ns, target, owner="root", group="root", mode=0755):
+    target_path = os.path.join(ns.mountpoint, target)
+    abs_target_path = os.path.join("/", target)
+
+    os.mkdir(target_path, mode)
+
+    chroot(ns.mountpoint, "chown", "{0}:{1}".format(owner, group),
+           abs_target_path)

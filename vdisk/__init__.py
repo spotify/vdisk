@@ -150,6 +150,10 @@ def setup_argument_parser():
                          nargs='?',
                          help="List of selections",
                          default=None)
+    install.add_argument("-d", "--download",
+                        help="Only download the selections, don't install.",
+                        default=False,
+                        action="store_true")
     install.set_defaults(action=action_install)
 
     enter = actions.add_parser("enter",
