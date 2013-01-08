@@ -20,6 +20,9 @@ import argparse
 import logging
 import yaml
 
+__version__ = (0, 2, 0)
+__version_string__ = ".".join(map(str, __version__))
+
 from vdisk.actions.install import action as action_install
 from vdisk.actions.create import action as action_create
 from vdisk.actions.bootstrap import action as action_bootstrap
@@ -68,7 +71,7 @@ def read_config(path):
 def setup_argument_parser():
     parser = argparse.ArgumentParser()
     parser.add_argument("-v", "--version", action="version",
-                        version="vdisk 0.1")
+                        version="vdisk " + __version_string__)
     parser.add_argument("--root",
                         metavar="<dir>",
                         help="Root directory of project, default: {default}",
@@ -152,9 +155,9 @@ def setup_argument_parser():
                          help="List of selections",
                          default=None)
     install.add_argument("-d", "--download",
-                        help="Only download the selections, don't install.",
-                        default=False,
-                        action="store_true")
+                         help="Only download the selections, don't install.",
+                         default=False,
+                         action="store_true")
     install.set_defaults(action=action_install)
 
     enter = actions.add_parser("enter",
