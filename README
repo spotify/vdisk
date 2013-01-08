@@ -59,6 +59,9 @@ vdisk.yaml - Contains configuration for how to create your virtual disk.
 License & Credits
 =================
 
-This software is released under the GNU GPL, see COPYING for details. It is 
-written by John-John Tedro <udoprog@spotify.com> and
-Noa Resare <noa@spotify.com>. Copyright is held by Spotify AB.
+This software is released under the GNU GPL, see COPYING for details.
+
+It is authored by John-John Tedro <udoprog@spotify.com>,
+Noa Resare <noa@spotify.com> and Lars-Erik Stenholm <lasse@spotify.com>.
+
+Copyright is held by Spotify AB.
