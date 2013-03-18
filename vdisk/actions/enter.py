@@ -25,7 +25,7 @@ def action(ns):
     if not os.path.isfile(ns.path):
         raise Exception("No such file: {0}".format(ns.path))
 
-    with entered_system(ns.path, ns.volume_group, ns.mountpoint) as d:
+    with entered_system(ns.path, ns.volume_group, ns.mountpoint, ns.ec2) as d:
         path = d[2]
         exitcode, out, err = chroot(path, ns.shell, raise_on_exit=False)
         return exitcode

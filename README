@@ -51,6 +51,22 @@ machine or an emulator like qemu.
 
     qemu-system-x86_64 -hda foo.img -monitor stdio
 
+EC2
+=====
+
+You must include /boot/grub/menu.lst  it in your vdisk.yaml. Simple example:
+
+default 0
+timeout 3
+title EC2
+root (hd0,0)
+kernel /vmlinuz root=/dev/mapper/VolFoo-root ro
+initrd  /initrd.img
+
+Depending on your kernel you might also need to create
+/etc/initramfs-tools/modules with xenblk and xennet modules, vdisk will execute
+update-initramfs as the final step.
+
 Important Files
 ===============
 

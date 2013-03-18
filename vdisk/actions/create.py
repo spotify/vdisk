@@ -37,23 +37,36 @@ def action(ns):
 
     with open(ns.path, "w") as f:
         f.truncate(ns.size.size)
-
-    parted("-s", "--", ns.path,
-           "mklabel", "gpt")
-    parted("-s", "--", ns.path,
-           "mkpart", "no-fs", "1", "2",
-           "set", "1", "bios_grub", "on")
-    parted("-s", "--", ns.path,
-           "mkpart", "primary", "2", "-1",
-           "set", "2", "lvm", "on")
+    if ns.ec2:
+        # pv-grub depends on mbr and a separate non-lvm boot partition
+        parted("-s", "--", ns.path,
+               "mklabel", "msdos")
+        parted("-s", "--", ns.path,
+               "mkpart", "primary", "1", "50",
+               "set", "1", "boot", "on")
+        parted("-s", "--", ns.path,
+               "mkpart", "primary", "50", "-1",
+               "set", "2", "lvm", "on")
+    else:
+        parted("-s", "--", ns.path,
+               "mklabel", "gpt")
+        parted("-s", "--", ns.path,
+               "mkpart", "nofs", "1", "2",
+               "set", "1", "bios_grub", "on")
+        parted("-s", "--", ns.path,
+               "mkpart", "primary", "2", "-1",
+               "set", "2", "lvm", "on")
     parted("-s", "--", ns.path, "print")
+
 
     with mounted_loopback(ns.path) as devices:
         for loop_device, subdevices in devices.items():
             if len(subdevices) < 2:
                 log.warning("Ignoring {0}: too few partitions")
                 continue
-
+            if ns.ec2:
+              # creating /boot file system
+              mkfs_ext4(subdevices[0])
             lvm("pvcreate", subdevices[1])
             lvm("vgcreate", ns.volume_group, subdevices[1])
             lvm("lvcreate", "-L", "7G", "-n", "root", ns.volume_group)
