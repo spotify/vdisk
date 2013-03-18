@@ -47,7 +47,7 @@ def action(ns):
     if not os.path.isfile(ns.selections):
         raise Exception("Missing selections file: {0}".format(ns.selections))
 
-    with entered_system(ns.path, ns.volume_group, ns.mountpoint) as d:
+    with entered_system(ns.path, ns.volume_group, ns.mountpoint, ns.ec2) as d:
         devices, logical_volumes, path = d
 
         # find first device as soon as possible
@@ -63,12 +63,19 @@ def action(ns):
         else:
             install_selections(ns, apt_env, path)
 
-        tmp_devicemap = generate_temporary_devicemap(devices)
-        log.info("Writing temporary device.map")
-        write_mounted(ns.mountpoint, "boot/grub/device.map", tmp_devicemap)
+        if ns.ec2:
+            # we need /boot/boot/grub/menu.lst since pv-grub
+            # checks /boot/grub/menu.lst on (hd0,0) partition
+            log.info("Creating a relative symlink /boot/boot -> .")
+            os.symlink('.', "{0}/boot/boot".format(ns.mountpoint))
+        else:
+            tmp_devicemap = generate_temporary_devicemap(devices)
+            log.info("Writing temporary device.map")
+            write_mounted(ns.mountpoint, "boot/grub/device.map", tmp_devicemap)
 
-        log.info("Installing grub on first device")
-        chroot(path, "grub-install", "--no-floppy", first_device)
+            log.info("Installing grub on first device")
+            chroot(path, "grub-install", "--no-floppy", first_device)
+
 
         log.info("Writing fstab")
         fstab = generate_fstab(ns)
@@ -86,6 +93,8 @@ def action(ns):
 
         if postinst:
             execute_postinst(ns, postinst)
+
+	update_initramfs(ns)
 
     return 0
 
@@ -229,3 +238,6 @@ def install_manifest(ns, manifest):
 def execute_postinst(ns, postinst):
     for trigger in postinst:
         chroot(ns.mountpoint, ns.shell, "-c", trigger)
+
+def update_initramfs(ns):
+    chroot(ns.mountpoint, ns.shell, "-c", 'update-initramfs -u')

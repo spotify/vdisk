@@ -38,7 +38,7 @@ def action(ns):
 
             puppet_env["FACTER_{0}".format(key)] = value
 
-    with entered_system(ns.path, ns.volume_group, ns.mountpoint) as d:
+    with entered_system(ns.path, ns.volume_group, ns.mountpoint, ns.ec2) as d:
         devices, logical_volumes, path = d
 
         puppetpath = "{0}/puppet".format(ns.mountpoint)

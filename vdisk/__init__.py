@@ -83,6 +83,10 @@ def setup_argument_parser():
                               "DEBUG, INFO, ERROR. Default: INFO"),
                         type=lambda l: getattr(logging, l.upper(),
                                                logging.INFO))
+    parser.add_argument("--ec2", action="store_true",
+                        help=("Create an ec2-compatible image for pv-grub/hd00 AKI"),
+                        default=False)
+
     parser.add_argument("-V", "--volume-group",
                         metavar="<name>",
                         help="Name of volume group, default: VolGroup00",

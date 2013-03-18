@@ -119,17 +119,17 @@ def mounted_device(device, mountpoint, **opts):
 
 
 @contextlib.contextmanager
-def entered_system(path, volume_group, mountpoint):
+def entered_system(path, volume_group, mountpoint, ec2_layout=False):
     with mounted_loopback(path) as devices:
         with available_lvm(volume_group) as logical_volumes:
-            mounts = contextlib.nested(
+            mounts = [
                 mounted_device(logical_volumes[0], mountpoint),
-                mounted_device("null", "{0}/proc".format(mountpoint),
-                               mount_type="proc"),
-                mounted_device("/dev", "{0}/dev".format(mountpoint),
-                               mount_bind=True))
+                mounted_device("null", "{0}/proc".format(mountpoint), mount_type="proc"),
+                mounted_device("/dev", "{0}/dev".format(mountpoint),  mount_bind=True)]
+            if ec2_layout:
+                mounts.append(mounted_device(devices.values()[0][0],"{0}/boot".format(mountpoint)))
 
-            with mounts:
+            with contextlib.nested(*mounts):
                 yield devices, logical_volumes, mountpoint
 
 
