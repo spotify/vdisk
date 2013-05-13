@@ -1,18 +1,18 @@
-# Copyright (c) 2012 Spotify AB
+# -*- coding: utf-8 -*-
+# Copyright (c) 2013 Spotify AB
+#
+# Licensed under the Apache License, Version 2.0 (the "License"); you may not
+# use this file except in compliance with the License. You may obtain a copy of
+# the License at
+#
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+# WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
+# License for the specific language governing permissions and limitations under
+# the License.
 
-# This program is free software: you can redistribute it and/or modify
-# it under the terms of the GNU General Public License as published by
-# the Free Software Foundation, either version 3 of the License, or
-# (at your option) any later version.
-#
-# This program is distributed in the hope that it will be useful,
-# but WITHOUT ANY WARRANTY; without even the implied warranty of
-# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-# GNU General Public License for more details.
-#
-# You should have received a copy of the GNU General Public License
-# along with this program.  If not, see <http://www.gnu.org/licenses/>.
-import sys
 import os
 import shutil
 import contextlib
@@ -32,7 +32,7 @@ chroot = ExternalCommand("chroot")
 
 
 @contextlib.contextmanager
-def mounted_loopback(path, subdevice_pattern="/dev/mapper/{0}"):
+def mounted_loopback(path, partition_pattern="/dev/mapper/{0}"):
     """
     Mount the specified path as loopback devices.
 
@@ -56,15 +56,13 @@ def mounted_loopback(path, subdevice_pattern="/dev/mapper/{0}"):
 
     for line in out:
         parts = line.split()
-        subdevice = subdevice_pattern.format(parts[2])
-        devices.setdefault(loop, []).append(subdevice)
+        partition = partition_pattern.format(parts[2])
+        devices.setdefault(loop, []).append(partition)
 
     try:
         yield devices
-    except:
-        log.error("exception thrown", exc_info=sys.exc_info())
     finally:
-        for path, subdevices in devices.items():
+        for path, partitions in devices.items():
             kpartx("-d", path)
             losetup("-d", path)
 
@@ -77,16 +75,16 @@ def available_lvm(volume_group):
     exitcode, out, err = lvm("lvdisplay", "-c", volume_group,
                              capture=True, remove_empty=True)
 
-    logical_volumes = list()
+    logical_volumes = dict()
 
     for line in out:
         parts = line.split(":")
-        logical_volumes.append(parts[0])
+        device = parts[0]
+        name = device.split('/')[-1]
+        logical_volumes[name] = device
 
     try:
         yield logical_volumes
-    except:
-        log.error("exception thrown", exc_info=sys.exc_info())
     finally:
         lvm("vgchange", "-a", "n", volume_group)
         udevadm("settle")
@@ -95,6 +93,9 @@ def available_lvm(volume_group):
 @contextlib.contextmanager
 def mounted_device(device, mountpoint, **opts):
     args = []
+
+    if not os.path.isdir(mountpoint):
+        os.makedirs(mountpoint)
 
     mount_type = opts.get("mount_type")
 
@@ -107,30 +108,53 @@ def mounted_device(device, mountpoint, **opts):
         args.extend(["--bind"])
 
     args.extend([device, mountpoint])
+
     mount(*args)
+
     udevadm("settle")
 
     try:
         yield
-    except:
-        log.error("exception thrown", exc_info=sys.exc_info())
     finally:
         umount(mountpoint)
 
 
 @contextlib.contextmanager
-def entered_system(path, volume_group, mountpoint, ec2_layout=False):
+def entered_system(path, volume_group, mountpoint, **kw):
+    extra_mounts = kw.pop("extra_mounts", None)
+    mount_proc = kw.pop("mount_proc", True)
+    mount_dev = kw.pop("mount_dev", True)
+
     with mounted_loopback(path) as devices:
-        with available_lvm(volume_group) as logical_volumes:
+        with available_lvm(volume_group) as lv:
             mounts = [
-                mounted_device(logical_volumes[0], mountpoint),
-                mounted_device("null", "{0}/proc".format(mountpoint), mount_type="proc"),
-                mounted_device("/dev", "{0}/dev".format(mountpoint),  mount_bind=True)]
-            if ec2_layout:
-                mounts.append(mounted_device(devices.values()[0][0],"{0}/boot".format(mountpoint)))
+                mounted_device(lv['root'], mountpoint),
+            ]
+
+            if mount_proc:
+                mounts.append(
+                    mounted_device(
+                        "null", "{0}/proc".format(mountpoint),
+                        mount_type="proc")
+                )
+
+            if mount_dev:
+                mounts.append(
+                    mounted_device(
+                        "/dev", "{0}/dev".format(mountpoint),
+                        mount_bind=True)
+                )
+
+            # mount boot if available.
+            if 'boot' in lv:
+                mounts.append(
+                    mounted_device(lv['boot'], "{0}/boot".format(mountpoint)))
+
+            if extra_mounts:
+                mounts.extend(m(devices, lv) for m in extra_mounts)
 
             with contextlib.nested(*mounts):
-                yield devices, logical_volumes, mountpoint
+                yield devices, lv, mountpoint
 
 
 def install_packages(ns, path, packages, env=None, extra=[]):
@@ -156,8 +180,8 @@ def install_packages(ns, path, packages, env=None, extra=[]):
 
 
 def find_first_device(devices):
-    for (device, subdevices) in sorted(devices.items()):
-        return device
+    for (device, partitions) in sorted(devices.items()):
+        return device, partitions
 
     raise Exception("No device found: {0!r}".format(devices))
 
@@ -177,11 +201,27 @@ def copy_file(ns, source, target, owner="root", group="root", mode=0644):
 
     chroot(ns.mountpoint, "chmod", oct(mode), abs_target_path)
 
+
 def create_directory(ns, target, owner="root", group="root", mode=0755):
     target_path = os.path.join(ns.mountpoint, target)
     abs_target_path = os.path.join("/", target)
 
-    os.mkdir(target_path, mode)
+    if not os.path.isdir(target_path):
+        os.mkdir(target_path, mode)
 
     chroot(ns.mountpoint, "chown", "{0}:{1}".format(owner, group),
            abs_target_path)
+
+
+def write_mounted(mountpoint, path, lines):
+    with open(os.path.join(mountpoint, path), "w") as f:
+        for line in lines:
+            print >>f, line
+
+
+def generate_devicemap(devices):
+    for i, (device, partitions) in enumerate(sorted(devices.items())):
+        yield "(hd{0}) {1}".format(i, device)
+
+        for s, partition in enumerate(partitions):
+            yield "(hd{0},{1}) {2}".format(i, s, partition)

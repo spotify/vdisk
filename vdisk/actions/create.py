@@ -1,80 +1,32 @@
-# Copyright (c) 2012 Spotify AB
+# -*- coding: utf-8 -*-
+# Copyright (c) 2013 Spotify AB
+#
+# Licensed under the Apache License, Version 2.0 (the "License"); you may not
+# use this file except in compliance with the License. You may obtain a copy of
+# the License at
+#
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+# WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
+# License for the specific language governing permissions and limitations under
+# the License.
 
-# This program is free software: you can redistribute it and/or modify
-# it under the terms of the GNU General Public License as published by
-# the Free Software Foundation, either version 3 of the License, or
-# (at your option) any later version.
-#
-# This program is distributed in the hope that it will be useful,
-# but WITHOUT ANY WARRANTY; without even the implied warranty of
-# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-# GNU General Public License for more details.
-#
-# You should have received a copy of the GNU General Public License
-# along with this program.  If not, see <http://www.gnu.org/licenses/>.
 import os
 import logging
 
 log = logging.getLogger(__name__)
-
-from vdisk.externalcommand import ExternalCommand
-
-from vdisk.helpers import mounted_loopback
-from vdisk.helpers import available_lvm
-
-parted = ExternalCommand("parted")
-lvm = ExternalCommand("lvm")
-mkfs_ext4 = ExternalCommand("mkfs.ext4")
-mkswap = ExternalCommand("mkswap")
 
 
 def action(ns):
     """
     Create base image with lvm.
     """
-    if not ns.force and os.path.isfile(ns.path):
-        raise Exception("path already exists: {0}".format(ns.path))
+    if not ns.force and os.path.isfile(ns.image_path):
+        raise Exception("path already exists: {0}".format(ns.image_path))
 
-    with open(ns.path, "w") as f:
+    with open(ns.image_path, "w") as f:
         f.truncate(ns.size.size)
-    if ns.ec2:
-        # pv-grub depends on mbr and a separate non-lvm boot partition
-        parted("-s", "--", ns.path,
-               "mklabel", "msdos")
-        parted("-s", "--", ns.path,
-               "mkpart", "primary", "1", "50",
-               "set", "1", "boot", "on")
-        parted("-s", "--", ns.path,
-               "mkpart", "primary", "50", "-1",
-               "set", "2", "lvm", "on")
-    else:
-        parted("-s", "--", ns.path,
-               "mklabel", "gpt")
-        parted("-s", "--", ns.path,
-               "mkpart", "nofs", "1", "2",
-               "set", "1", "bios_grub", "on")
-        parted("-s", "--", ns.path,
-               "mkpart", "primary", "2", "-1",
-               "set", "2", "lvm", "on")
-    parted("-s", "--", ns.path, "print")
 
-
-    with mounted_loopback(ns.path) as devices:
-        for loop_device, subdevices in devices.items():
-            if len(subdevices) < 2:
-                log.warning("Ignoring {0}: too few partitions")
-                continue
-            if ns.ec2:
-              # creating /boot file system
-              mkfs_ext4(subdevices[0])
-            lvm("pvcreate", subdevices[1])
-            lvm("vgcreate", ns.volume_group, subdevices[1])
-            lvm("lvcreate", "-L", "7G", "-n", "root", ns.volume_group)
-            lvm("lvcreate", "-l", '100%FREE', "-n", "swap", ns.volume_group)
-
-            with available_lvm(ns.volume_group) as logical_volumes:
-                log.info("formatting logical volumes")
-                mkfs_ext4(logical_volumes[0])
-                mkswap("-f", logical_volumes[1])
-
-    return 0
+    ns.preset.setup_disks()

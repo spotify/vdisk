@@ -1,18 +1,17 @@
-#!/usr/bin/python
-# Copyright (c) 2012 Spotify AB
-
-# This program is free software: you can redistribute it and/or modify
-# it under the terms of the GNU General Public License as published by
-# the Free Software Foundation, either version 3 of the License, or
-# (at your option) any later version.
+# -*- coding: utf-8 -*-
+# Copyright (c) 2013 Spotify AB
 #
-# This program is distributed in the hope that it will be useful,
-# but WITHOUT ANY WARRANTY; without even the implied warranty of
-# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-# GNU General Public License for more details.
+# Licensed under the Apache License, Version 2.0 (the "License"); you may not
+# use this file except in compliance with the License. You may obtain a copy of
+# the License at
 #
-# You should have received a copy of the GNU General Public License
-# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+# WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
+# License for the specific language governing permissions and limitations under
+# the License.
 
 import os
 import sys
@@ -20,7 +19,7 @@ import argparse
 import logging
 import yaml
 
-__version__ = (0, 2, 0)
+__version__ = (0, 3, 0)
 __version_string__ = ".".join(map(str, __version__))
 
 from vdisk.actions.install import action as action_install
@@ -48,16 +47,21 @@ class sizeunit(object):
     DEFAULT_UNIT = 'B'
 
     def __init__(self, string):
-        self.size = self._parse_size(string)
+        self.size, self.unit = self._parse_size(string)
+        self.original = string
+
+    @property
+    def formatted(self):
+        return self.original
 
     def _parse_size(self, string):
         unit = string[-1]
         conversion = self.units.get(unit)
 
         if conversion is not None:
-            return int(string[:-1]) * conversion
+            return int(string[:-1]) * conversion, unit
 
-        return int(string)
+        return int(string), self.DEFAULT_UNIT
 
 
 def read_config(path):
@@ -72,6 +76,7 @@ def setup_argument_parser():
     parser = argparse.ArgumentParser()
     parser.add_argument("-v", "--version", action="version",
                         version="vdisk " + __version_string__)
+
     parser.add_argument("--root",
                         metavar="<dir>",
                         help="Root directory of project, default: {default}",
@@ -91,26 +96,39 @@ def setup_argument_parser():
                         metavar="<name>",
                         help="Name of volume group, default: VolGroup00",
                         default="VolGroup00")
+
+    parser.add_argument("--root-size",
+                        metavar="<gb>",
+                        help=("Size of root partition, must be smaller than "
+                              "'--size'"),
+                        default=sizeunit('7G'),
+                        type=sizeunit)
+
     parser.add_argument("-m", "--mountpoint",
                         metavar="<dir>",
                         help="Mount point for disk images, default: tmp/mount",
                         default="tmp/mount")
+
     parser.add_argument("-S", "--shell",
                         metavar="<bin>",
                         help="Shell to use in chroot, default: /bin/sh",
                         default="/bin/sh")
+
     parser.add_argument("-A", "--apt-get", dest="apt_get",
                         metavar="<bin>",
                         help="Apt get to use in chroot, default: apt-get",
                         default="apt-get")
+
     parser.add_argument("-D", "--dpkg", dest="dpkg",
                         metavar="<bin>",
                         help="Dpkg to use in chroot, default: apt-get",
                         default="dpkg")
+
     parser.add_argument("-G", "--gem",
                         metavar="<bin>",
                         help="Gem to use in chroot, default: gem",
                         default="gem")
+
     parser.add_argument("-M", "--mirror",
                         metavar="<url>",
                         default="http://ftp.se.debian.org/debian",
@@ -121,7 +139,8 @@ def setup_argument_parser():
                         metavar="<config>",
                         help="vdisk configuration",
                         default=None)
-    parser.add_argument("path",
+
+    parser.add_argument("image_path",
                         metavar="<image>",
                         help="Path to image")
 
@@ -135,19 +154,24 @@ def setup_argument_parser():
                         metavar="<size>",
                         default=sizeunit("8G"),
                         type=sizeunit)
+
     create.add_argument("-f", "--force",
                         help="Force creation, even if file exists",
                         default=False,
                         action="store_true")
+
     create.set_defaults(action=action_create)
 
     bootstrap = actions.add_parser("bootstrap",
                                    help=("bootstrap a new disk image w/ "
                                          "debootstrap"))
+
     bootstrap.add_argument("-S", "--suite", default="squeeze",
                            help="Installation suite, default: squeeze")
+
     bootstrap.add_argument("-A", "--arch", default="amd64",
                            help="Installation architecture, default: amd64")
+
     bootstrap.set_defaults(action=action_bootstrap)
 
     install = actions.add_parser("install",
@@ -158,10 +182,12 @@ def setup_argument_parser():
                          nargs='?',
                          help="List of selections",
                          default=None)
+
     install.add_argument("-d", "--download",
                          help="Only download the selections, don't install.",
                          default=False,
                          action="store_true")
+
     install.set_defaults(action=action_install)
 
     enter = actions.add_parser("enter",
@@ -171,12 +197,15 @@ def setup_argument_parser():
 
     puppet = actions.add_parser("puppet",
                                 help="Run puppet inside a disk image")
+
     puppet.add_argument("puppetpath",
                         metavar="<dir>",
                         help="Path to puppet modules")
+
     puppet.add_argument("-F", "--fact", dest="facts", action='append',
                         metavar="<name>=<value>",
                         help="Override puppet facts")
+
     puppet.add_argument("puppetargs",
                         metavar="<puppet-args...>",
                         help="Arguments passed into puppet",
@@ -188,6 +217,9 @@ def setup_argument_parser():
 
 
 def main(args):
+    from vdisk.preset.ec2_preset import EC2Preset
+    from vdisk.preset.generic_preset import GenericPreset
+
     logging.basicConfig(level=logging.INFO)
     parser = setup_argument_parser()
     ns = parser.parse_args(args)
@@ -201,6 +233,12 @@ def main(args):
         ns.config = os.path.join(ns.root, "vdisk.yaml")
 
     ns.config = read_config(ns.config)
+
+    if ns.ec2:
+        ns.preset = EC2Preset(ns)
+    else:
+        ns.preset = GenericPreset(ns)
+
     return ns.action(ns)
 
 

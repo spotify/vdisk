@@ -1,28 +1,28 @@
-# Copyright (c) 2012 Spotify AB
+# -*- coding: utf-8 -*-
+# Copyright (c) 2013 Spotify AB
+#
+# Licensed under the Apache License, Version 2.0 (the "License"); you may not
+# use this file except in compliance with the License. You may obtain a copy of
+# the License at
+#
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+# WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
+# License for the specific language governing permissions and limitations under
+# the License.
 
-# This program is free software: you can redistribute it and/or modify
-# it under the terms of the GNU General Public License as published by
-# the Free Software Foundation, either version 3 of the License, or
-# (at your option) any later version.
-#
-# This program is distributed in the hope that it will be useful,
-# but WITHOUT ANY WARRANTY; without even the implied warranty of
-# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-# GNU General Public License for more details.
-#
-# You should have received a copy of the GNU General Public License
-# along with this program.  If not, see <http://www.gnu.org/licenses/>.
 import os
 import re
 import logging
 
 log = logging.getLogger(__name__)
 
-from vdisk.helpers import entered_system
-from vdisk.helpers import find_first_device
 from vdisk.helpers import copy_file
 from vdisk.helpers import create_directory
 from vdisk.helpers import install_packages
+from vdisk.helpers import write_mounted
 
 from vdisk.externalcommand import ExternalCommand
 
@@ -38,8 +38,8 @@ APTITUDE_ENV = {
 
 
 def action(ns):
-    if not os.path.isfile(ns.path):
-        raise Exception("Missing image file: {0}".format(ns.path))
+    if not os.path.isfile(ns.image_path):
+        raise Exception("Missing image file: {0}".format(ns.image_path))
 
     if ns.selections is None:
         ns.selections = os.path.join(ns.root, "selections", "default")
@@ -47,43 +47,31 @@ def action(ns):
     if not os.path.isfile(ns.selections):
         raise Exception("Missing selections file: {0}".format(ns.selections))
 
-    with entered_system(ns.path, ns.volume_group, ns.mountpoint, ns.ec2) as d:
-        devices, logical_volumes, path = d
+    with ns.preset.entered_system() as d:
+        devices, logical_volumes, mountpoint = d
 
         # find first device as soon as possible
-        first_device = find_first_device(devices)
         apt_env = dict(APTITUDE_ENV)
 
         log.info("Configuring apt")
-        configure_base_system(ns, apt_env, path)
+        configure_base_system(ns, apt_env, mountpoint)
 
         log.info("Install selected packages")
+
         if ns.download:
-            download_selections(ns, apt_env, path)
+            download_selections(ns, apt_env, mountpoint)
         else:
-            install_selections(ns, apt_env, path)
+            install_selections(ns, apt_env, mountpoint)
 
-        if ns.ec2:
-            # we need /boot/boot/grub/menu.lst since pv-grub
-            # checks /boot/grub/menu.lst on (hd0,0) partition
-            log.info("Creating a relative symlink /boot/boot -> .")
-            os.symlink('.', "{0}/boot/boot".format(ns.mountpoint))
-        else:
-            tmp_devicemap = generate_temporary_devicemap(devices)
-            log.info("Writing temporary device.map")
-            write_mounted(ns.mountpoint, "boot/grub/device.map", tmp_devicemap)
-
-            log.info("Installing grub on first device")
-            chroot(path, "grub-install", "--no-floppy", first_device)
-
+        ns.preset.setup_boot(devices, mountpoint)
 
         log.info("Writing fstab")
         fstab = generate_fstab(ns)
-        write_mounted(ns.mountpoint, "etc/fstab", fstab)
+        write_mounted(mountpoint, "etc/fstab", fstab)
 
         log.info("Writing real device.map")
         new_devicemap = generate_devicemap(ns, logical_volumes)
-        write_mounted(ns.mountpoint, "boot/grub/device.map", new_devicemap)
+        write_mounted(mountpoint, "boot/grub/device.map", new_devicemap)
 
         manifest = ns.config.get("manifest")
         postinst = ns.config.get("postinst")
@@ -94,15 +82,9 @@ def action(ns):
         if postinst:
             execute_postinst(ns, postinst)
 
-	update_initramfs(ns)
+        chroot(ns.mountpoint, "update-initramfs", "-u")
 
     return 0
-
-
-def write_mounted(mountpoint, path, lines):
-    with open(os.path.join(mountpoint, path), "w") as f:
-        for line in lines:
-            print >>f, line
 
 
 def generate_sources(sources, default_components=["main"],
@@ -130,12 +112,12 @@ def generate_sources(sources, default_components=["main"],
             source_type, url, suite, " ".join(components))
 
 
-def configure_base_system(ns, apt_env, path):
+def configure_base_system(ns, apt_env, mountpoint):
     prepackages = ns.config.get("pre-packages")
 
     if prepackages:
         log.info("Installing pre-required packages")
-        install_packages(ns, path, prepackages,
+        install_packages(ns, mountpoint, prepackages,
                          env=apt_env,
                          extra=["-y", "--force-yes"])
 
@@ -144,54 +126,47 @@ def configure_base_system(ns, apt_env, path):
     if sources:
         log.info("Writing sources.list")
         sourceslist = generate_sources(sources)
-        write_mounted(ns.mountpoint, "etc/apt/sources.list", sourceslist)
+        write_mounted(mountpoint, "etc/apt/sources.list", sourceslist)
 
     log.info("Updating apt")
-    chroot(path, ns.apt_get, "-y", "update", env=apt_env)
+    chroot(mountpoint, ns.apt_get, "-y", "update", env=apt_env)
 
     packages = ns.config.get("packages")
 
     if packages:
         log.info("Installing required packages")
-        install_packages(ns, path, packages,
+        install_packages(ns, mountpoint, packages,
                          env=apt_env,
                          extra=["-y", "--force-yes"])
 
     log.info("Updating apt")
-    chroot(path, ns.apt_get, "-y", "update", env=apt_env)
+    chroot(mountpoint, ns.apt_get, "-y", "update", env=apt_env)
 
 
-def download_selections(ns, apt_env, path):
+def download_selections(ns, apt_env, mountpoint):
     with open(ns.selections) as f:
         log.info("Setting selections")
-        chroot(path, ns.dpkg, "--set-selections", env=apt_env,
+        chroot(mountpoint, ns.dpkg, "--set-selections", env=apt_env,
                input_fd=f)
 
     log.info("Downloading selections")
-    chroot(path, ns.apt_get, "-y", "-u", "--download-only",
+    chroot(mountpoint, ns.apt_get, "-y", "-u", "--download-only",
            "dselect-upgrade", env=apt_env)
 
-def install_selections(ns, apt_env, path):
+
+def install_selections(ns, apt_env, mountpoint):
     with open(ns.selections) as f:
         log.info("Setting selections")
-        chroot(path, ns.dpkg, "--set-selections", env=apt_env,
+        chroot(mountpoint, ns.dpkg, "--set-selections", env=apt_env,
                input_fd=f)
 
     log.info("Installing selections")
 
     write_mounted(ns.mountpoint, "usr/sbin/policy-rc.d", ["exit 101"])
-    chroot(path, 'chmod', '755', '/usr/sbin/policy-rc.d')
-    chroot(path, ns.apt_get, "-y", "-u",
+    chroot(mountpoint, 'chmod', '755', '/usr/sbin/policy-rc.d')
+    chroot(mountpoint, ns.apt_get, "-y", "-u",
            "dselect-upgrade", env=apt_env)
-    chroot(path, 'rm', '-f', '/usr/sbin/policy-rc.d')
-
-
-def generate_temporary_devicemap(devices):
-    for i, (device, subdevices) in enumerate(sorted(devices.items())):
-        yield "(hd{0}) {1}".format(i, device)
-
-        for s, subdevice in enumerate(subdevices):
-            yield "(hd{0},{1}) {2}".format(i, s, subdevice)
+    chroot(mountpoint, 'rm', '-f', '/usr/sbin/policy-rc.d')
 
 
 def generate_fstab(ns):
@@ -235,9 +210,7 @@ def install_manifest(ns, manifest):
         else:
             raise Exception("Uknown manifest type: {0} ({1})".format(ftype, target))
 
+
 def execute_postinst(ns, postinst):
     for trigger in postinst:
         chroot(ns.mountpoint, ns.shell, "-c", trigger)
-
-def update_initramfs(ns):
-    chroot(ns.mountpoint, ns.shell, "-c", 'update-initramfs -u')
