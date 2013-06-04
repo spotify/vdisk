@@ -19,7 +19,7 @@ import argparse
 import logging
 import yaml
 
-__version__ = (0, 3, 0)
+__version__ = (0, 3, 1)
 __version_string__ = ".".join(map(str, __version__))
 
 from vdisk.actions.install import action as action_install
