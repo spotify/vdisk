@@ -112,6 +112,19 @@ def generate_sources(sources, default_components=["main"],
             source_type, url, suite, " ".join(components))
 
 
+def insert_apt_keys(ns, mountpoint, keys):
+    for key in keys:
+        key_path = os.path.join(ns.root, "keys", key)
+
+        if not os.path.isfile(key_path):
+            raise Exception("No such key: {0}".format(key_path))
+
+        log.info("Inserting apt key: {0}".format(key_path))
+
+        with open(key_path) as fp:
+            chroot(mountpoint, "apt-key", "add", "-", input_fd=fp)
+
+
 def configure_base_system(ns, apt_env, mountpoint):
     prepackages = ns.config.get("pre-packages")
 
@@ -127,6 +140,11 @@ def configure_base_system(ns, apt_env, mountpoint):
         log.info("Writing sources.list")
         sourceslist = generate_sources(sources)
         write_mounted(mountpoint, "etc/apt/sources.list", sourceslist)
+
+    keys = ns.config.get("keys", [])
+
+    if keys:
+        insert_apt_keys(ns, mountpoint, keys)
 
     log.info("Updating apt")
     chroot(mountpoint, ns.apt_get, "-y", "update", env=apt_env)
