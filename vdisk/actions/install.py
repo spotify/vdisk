@@ -124,6 +124,15 @@ def insert_apt_keys(ns, mountpoint, keys):
         with open(key_path) as fp:
             chroot(mountpoint, "apt-key", "add", "-", input_fd=fp)
 
+def insert_apt_preferences(ns, mountpoint, preferences):
+    for preference in preferences:
+        preference_path = os.path.join(ns.root, "preferences", preference)
+
+        if not os.path.isfile(preference_path):
+            raise Exception("No such preference: {0}".format(preference_path))
+
+        log.info("Inserting apt preference: {0}".format(preference_path))
+        copy_file(ns, preference_path, "etc/apt/preferences.d/{0}".format(preference))
 
 def configure_base_system(ns, apt_env, mountpoint):
     prepackages = ns.config.get("pre-packages")
@@ -142,9 +151,12 @@ def configure_base_system(ns, apt_env, mountpoint):
         write_mounted(mountpoint, "etc/apt/sources.list", sourceslist)
 
     keys = ns.config.get("keys", [])
+    preferences = ns.config.get("preferences", [])
 
     if keys:
         insert_apt_keys(ns, mountpoint, keys)
+    if preferences:
+        insert_apt_preferences(ns, mountpoint, preferences)
 
     log.info("Updating apt")
     chroot(mountpoint, ns.apt_get, "-y", "update", env=apt_env)
