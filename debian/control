@@ -1,0 +1,15 @@
+Source: vdisk
+Priority: extra
+Maintainer: John-John Tedro <udoprog@spotify.com>
+Section: net
+Standards-Version: 3.9.3
+Build-Depends:
+ debhelper (>= 7), python
+X-Python-Version: >= 2.6
+
+Package: vdisk
+Architecture: all
+Depends:
+ ${python:Depends}, ${misc:Depends}, python-yaml, kpartx, parted, lvm2,
+ python-argparse
+Description: vdisk builds disk images with debian installed.

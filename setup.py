@@ -17,7 +17,4 @@ setup(
     scripts=[
         "bin/vdisk"
     ],
-    data_files=[
-        ("", ["LICENSE.txt"]),
-    ],
 )
