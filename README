@@ -1,7 +1,13 @@
 vdisk is a tool to create a debian system suitable for use by a
 virtualization technology such as kvm/qemu. The output image is
-is a sparse file holding a a partition table, the grub boot loader
-and a filesystem containing the base system.
+is a sparse file containing a partition table, a boot loader (grub)
+and a partition with the base system.
+
+vdisk builds a sparse image and mounts it to a loopback device for convenient
+access.
+This allows for easy manipulation of these inside of a chroot,
+effectively allowing for bootstrapping a virtual base system without having to
+fire up a virtual machine.
 
 Installation
 ============
@@ -11,19 +17,9 @@ configuration builds a Debian Squeeze image.
 
 vdisk depends on a few packages being installed on the system where
 images are built. This can be accomplished by running the following
-command:
+command.
 
     apt-get install kpartx parted lvm2 python-argparse
-
-Functionality
-=============
-
-vdisk builds sparse images and mounts them to loopback devices for convenient
-access.
-
-This allows for easy manipulation of these images inside of a chroot,
-effectively letting allow for setup of a virtual base system without having to
-run a virtual machine.
 
 Usage
 =====
@@ -71,11 +67,12 @@ Important Files
 ===============
 
 vdisk.yaml - Contains configuration for how to create your virtual disk.
+             This should be recreated in your project and modified to suit your needs.
 
 License & Credits
 =================
 
-This software is released under the GNU GPL, see COPYING for details.
+This software is released under the Apache 2 license, see LICENSE.txt for details.
 
 It is authored by John-John Tedro <udoprog@spotify.com>,
 Noa Resare <noa@spotify.com> and Lars-Erik Stenholm <lasse@spotify.com>.
