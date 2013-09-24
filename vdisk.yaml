@@ -1,3 +1,4 @@
+# Files and directories to copy into the base system and their target permissions.
 manifest:
     - target: /etc/network/interfaces
       source: files/interfaces
@@ -10,6 +11,7 @@ manifest:
       group: root
       mode: 0755
 
+# Debian sources to configure.
 sources:
     debian-squeeze:
         url: http://ftp.debian.org/debian
@@ -17,10 +19,12 @@ sources:
         components:
             - main
 
+# Packages that will be installed in the base system, prior to running the first 'apt-get update'.
 pre-packages:
     default:
         - apt-transport-https
 
+# Packages that will be installed in the base system.
 packages:
     default:
         - grub2
@@ -30,6 +34,7 @@ packages:
         - openssh-server
         - curl
 
+# Commands that will be executed after the base system has been created.
 postinst:
     - "echo root:changeme | chpasswd"
     - "echo 'en_US UTF-8' >> /etc/locale.gen && /usr/sbin/locale-gen"
