@@ -47,11 +47,11 @@ class EC2Preset(object):
         parted("mklabel", "msdos")
 
         parted(
-            "mkpart", "primary", "1", "50",
+            "mkpart", "primary", "1", "512",
             "set", "1", "boot", "on"
         )
         parted(
-            "mkpart", "primary", "50", "-1",
+            "mkpart", "primary", "512", "-1",
             "set", "2", "lvm", "on"
         )
 
