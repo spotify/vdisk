@@ -8,6 +8,7 @@ setup(
     description="Helper tool to build debian based virtual disks.",
     author='John-John Tedro',
     author_email='udoprog@spotify.com',
+    url='https://github.com/spotify/vdisk',
     license='Apache License 2.0',
     packages=[
         'vdisk',
