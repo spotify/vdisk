@@ -49,7 +49,7 @@ def mounted_loopback(path, partition_pattern="/dev/mapper/{0}"):
         exitcode, out, err = kpartx("-v", "-a", loop, capture=True,
                                     remove_empty=True)
     except:
-        losetup("-d", path)
+        losetup("-d", loop)
         yield
 
     udevadm("settle")
