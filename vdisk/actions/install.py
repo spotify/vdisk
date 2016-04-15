@@ -53,6 +53,10 @@ def action(ns):
         # find first device as soon as possible
         apt_env = dict(APTITUDE_ENV)
 
+        preinst = ns.config.get("preinst")
+        if preinst:
+            execute_chrooted(ns, preinst)
+
         log.info("Configuring apt")
         configure_base_system(ns, apt_env, mountpoint)
 
@@ -80,7 +84,7 @@ def action(ns):
             install_manifest(ns, manifest)
 
         if postinst:
-            execute_postinst(ns, postinst)
+            execute_chrooted(ns, postinst)
 
         chroot(ns.mountpoint, "update-initramfs", "-u")
 
@@ -157,6 +161,9 @@ def configure_base_system(ns, apt_env, mountpoint):
         insert_apt_keys(ns, mountpoint, keys)
     if preferences:
         insert_apt_preferences(ns, mountpoint, preferences)
+
+    if hasattr(ns.preset, 'setup_apt'):
+        ns.preset.setup_apt()
 
     log.info("Updating apt")
     chroot(mountpoint, ns.apt_get, "-y", "update", env=apt_env)
@@ -241,6 +248,6 @@ def install_manifest(ns, manifest):
             raise Exception("Uknown manifest type: {0} ({1})".format(ftype, target))
 
 
-def execute_postinst(ns, postinst):
+def execute_chrooted(ns, postinst):
     for trigger in postinst:
         chroot(ns.mountpoint, ns.shell, "-c", trigger)
